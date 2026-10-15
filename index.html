@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Jarvis</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#050a14" />
+<style>
+  :root {
+    --bg: #050a14;
+    --bg2: #0a1424;
+    --blue: #2fb7ff;
+    --blue-dim: #1a4a66;
+    --text: #d9ecff;
+    --text-dim: #6f93b8;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(circle at 50% 20%, var(--bg2), var(--bg) 70%);
+    color: var(--text);
+    font-family: -apple-system, Roboto, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 24px 16px calc(32px + env(safe-area-inset-bottom));
+  }
+  header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--blue);
+    margin: 0;
+  }
+  #settingsBtn {
+    background: none; border: 1px solid var(--blue-dim);
+    color: var(--text-dim); border-radius: 10px;
+    padding: 6px 10px; font-size: 13px; cursor: pointer;
+  }
+  #stage {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+  #ring-wrap {
+    position: relative;
+    width: 220px; height: 220px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  svg#ring { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  svg#ring circle {
+    fill: none;
+    stroke: var(--blue);
+    stroke-width: 2;
+    opacity: 0.35;
+    transform-origin: center;
+  }
+  #ring.listening circle.c1 { animation: pulse 1.2s ease-in-out infinite; }
+  #ring.listening circle.c2 { animation: pulse 1.2s ease-in-out infinite 0.2s; }
+  #ring.listening circle.c3 { animation: pulse 1.2s ease-in-out infinite 0.4s; }
+  #ring.speaking circle { animation: spin 3s linear infinite; opacity: 0.6; }
+  @keyframes pulse {
+    0%, 100% { transform: scale(0.9); opacity: 0.2; }
+    50% { transform: scale(1.08); opacity: 0.7; }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  #micBtn {
+    width: 92px; height: 92px;
+    border-radius: 50%;
+    border: 2px solid var(--blue);
+    background: radial-gradient(circle, rgba(47,183,255,0.25), rgba(47,183,255,0.05));
+    color: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(47,183,255,0.35);
+    transition: transform 0.15s ease;
+  }
+  #micBtn:active { transform: scale(0.94); }
+  #micBtn.listening {
+    background: radial-gradient(circle, rgba(47,183,255,0.5), rgba(47,183,255,0.1));
+    box-shadow: 0 0 40px rgba(47,183,255,0.6);
+  }
+  #micBtn svg { width: 34px; height: 34px; }
+  #status {
+    color: var(--text-dim);
+    font-size: 14px;
+    min-height: 20px;
+    letter-spacing: 1px;
+  }
+  #transcript {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 48px;
+    padding: 0 8px;
+  }
+  #reply {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    color: var(--blue);
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 0 8px;
+  }
+  dialog#settings {
+    border: 1px solid var(--blue-dim);
+    border-radius: 16px;
+    background: var(--bg2);
+    color: var(--text);
+    padding: 20px;
+    width: min(92vw, 420px);
+  }
+  dialog#settings::backdrop { background: rgba(0,0,0,0.6); }
+  dialog#settings h2 { margin-top: 0; color: var(--blue); font-size: 16px; }
+  dialog#settings label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  dialog#settings input {
+    width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--blue-dim); background: var(--bg);
+    color: var(--text); font-size: 14px; margin-bottom: 14px;
+  }
+  dialog#settings .row { display: flex; gap: 10px; justify-content: flex-end; }
+  dialog#settings button {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--blue-dim);
+    background: transparent; color: var(--text); cursor: pointer;
+  }
+  dialog#settings button.primary { background: var(--blue); color: #001622; border-color: var(--blue); font-weight: 600; }
+  .hint { font-size: 12px; color: var(--text-dim); margin-top: -6px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>JARVIS</h1>
+    <button id="settingsBtn" aria-label="Configurações">⚙ Config</button>
+  </header>
+
+  <div id="stage">
+    <div id="ring-wrap">
+      <svg id="ring" viewBox="0 0 220 220">
+        <circle class="c1" cx="110" cy="110" r="80" />
+        <circle class="c2" cx="110" cy="110" r="95" />
+        <circle class="c3" cx="110" cy="110" r="105" />
+      </svg>
+      <button id="micBtn" aria-label="Falar com o Jarvis">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+          <path d="M19 11a7 7 0 0 1-14 0H3a9 9 0 0 0 8 8.94V22h2v-2.06A9 9 0 0 0 21 11h-2z"/>
+        </svg>
+      </button>
+    </div>
+    <div id="status">toque no microfone pra falar</div>
+    <div id="transcript"></div>
+    <div id="reply"></div>
+  </div>
+</div>
+
+<dialog id="settings">
+  <h2>Configurações</h2>
+  <label for="apiKey">Chave da API Gemini</label>
+  <input id="apiKey" type="password" placeholder="AIzaSy..." autocomplete="off" />
+  <div class="hint">Fica guardada só neste navegador (localStorage), nunca é enviada pra mim nem pra mais ninguém além do Google.</div>
+  <div class="row">
+    <button id="cancelSettings">Cancelar</button>
+    <button id="saveSettings" class="primary">Salvar</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  const micBtn = document.getElementById('micBtn');
+  const ring = document.getElementById('ring');
+  const statusEl = document.getElementById('status');
+  const transcriptEl = document.getElementById('transcript');
+  const replyEl = document.getElementById('reply');
+  const settingsDialog = document.getElementById('settings');
+  const apiKeyInput = document.getElementById('apiKey');
+
+  const KEY_STORAGE = 'jarvis_gemini_key';
+  const HISTORY_STORAGE = 'jarvis_history';
+  const MAX_HISTORY_TURNS = 10;
+
+  document.getElementById('settingsBtn').onclick = () => {
+    apiKeyInput.value = localStorage.getItem(KEY_STORAGE) || '';
+    settingsDialog.showModal();
+  };
+  document.getElementById('cancelSettings').onclick = () => settingsDialog.close();
+  document.getElementById('saveSettings').onclick = () => {
+    const v = apiKeyInput.value.trim();
+    if (v) localStorage.setItem(KEY_STORAGE, v);
+    settingsDialog.close();
+  };
+
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_STORAGE) || '[]'); }
+    catch (e) { return []; }
+  }
+  function pushHistory(role, text) {
+    const h = getHistory();
+    h.push({ role, parts: [{ text }] });
+    while (h.length > MAX_HISTORY_TURNS * 2) h.shift();
+    localStorage.setItem(HISTORY_STORAGE, JSON.stringify(h));
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let listening = false;
+
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      listening = true;
+      micBtn.classList.add('listening');
+      ring.classList.add('listening');
+      statusEl.textContent = 'ouvindo...';
+      transcriptEl.textContent = '';
+      replyEl.textContent = '';
+    };
+
+    recognition.onresult = (event) => {
+      let text = '';
+      for (let i = 0; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      transcriptEl.textContent = text;
+    };
+
+    recognition.onerror = (event) => {
+      listening = false;
+      micBtn.classList.remove('listening');
+      ring.classList.remove('listening');
+      if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+        statusEl.textContent = 'permissão de microfone negada';
+      } else if (event.error === 'no-speech') {
+        statusEl.textContent = 'não ouvi nada, tenta de novo';
+      } else {
+        statusEl.textContent = 'erro no microfone: ' + event.error;
+      }
+    };
+
+    recognition.onend = () => {
+      listening = false;
+      micBtn.classList.remove('listening');
+      ring.classList.remove('listening');
+      const finalText = transcriptEl.textContent.trim();
+      if (finalText) {
+        handleUserSpeech(finalText);
+      } else {
+        statusEl.textContent = 'toque no microfone pra falar';
+      }
+    };
+  } else {
+    statusEl.textContent = 'seu navegador não suporta reconhecimento de voz. use o Chrome.';
+    micBtn.disabled = true;
+  }
+
+  micBtn.onclick = () => {
+    if (!recognition) return;
+    if (listening) {
+      recognition.stop();
+      return;
+    }
+    const key = localStorage.getItem(KEY_STORAGE);
+    if (!key) {
+      statusEl.textContent = 'configure sua chave da API primeiro (⚙)';
+      settingsDialog.showModal();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    try { recognition.start(); }
+    catch (e) { /* already started */ }
+  };
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) {
+      statusEl.textContent = 'navegador sem suporte a voz falada';
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'pt-BR';
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const ptVoice = voices.find(v => v.lang === 'pt-BR') || voices.find(v => v.lang && v.lang.startsWith('pt'));
+    if (ptVoice) utter.voice = ptVoice;
+
+    utter.onstart = () => {
+      ring.classList.add('speaking');
+      statusEl.textContent = 'falando...';
+    };
+    utter.onend = () => {
+      ring.classList.remove('speaking');
+      statusEl.textContent = 'toque no microfone pra falar';
+    };
+    window.speechSynthesis.speak(utter);
+  }
+
+  async function askGemini(userText) {
+    const key = localStorage.getItem(KEY_STORAGE);
+    const history = getHistory();
+    const body = {
+      contents: [
+        ...history,
+        { role: 'user', parts: [{ text: userText }] }
+      ],
+      systemInstruction: {
+        parts: [{
+          text: 'Você é o Jarvis, um assistente pessoal em português brasileiro, direto e natural. ' +
+                'Responda sempre em português do Brasil, em frases curtas e faladas, sem usar markdown, ' +
+                'emojis, asteriscos ou listas, porque sua resposta vai ser lida em voz alta.'
+        }]
+      }
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Gemini ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join(' ').trim();
+    if (!reply) throw new Error('resposta vazia da API');
+    return reply;
+  }
+
+  async function handleUserSpeech(text) {
+    statusEl.textContent = 'pensando...';
+    try {
+      const reply = await askGemini(text);
+      pushHistory('user', text);
+      pushHistory('model', reply);
+      replyEl.textContent = reply;
+      speak(reply);
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = 'erro ao falar com a IA';
+      replyEl.textContent = String(err.message || err);
+    }
+  }
+
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+})();
+</script>
+</body>
+</html>
